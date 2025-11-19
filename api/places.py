@@ -1,35 +1,45 @@
-import requests
-import os
 from dotenv import load_dotenv
+import os
+load_dotenv()
+API_KEY = os.getenv("GEOAPIFY_API_KEY")
 
-env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
-load_dotenv(env_path)
+import requests
+from api.maps import geocode_city
+
 
 def get_places(city):
-    api_key = os.getenv("FOURSQUARE_API_KEY")
+    """
+    Fetch popular places around the given city using Geoapify.
+    Returns {"city": city, "places": [...]}
+    Geoapify does NOT provide images, so image=None.
+    """
 
-    url = "https://api.foursquare.com/v3/places/search"
+    lat, lon = geocode_city(city)
 
-    headers = {
-        "accept": "application/json",
-        "Authorization": api_key
-    }
+    # Correct categories (OR syntax, not commas)
+    url = (
+        "https://api.geoapify.com/v2/places?"
+        "categories=tourism.attraction|entertainment|leisure.park|heritage|natural"
+        f"&filter=circle:{lon},{lat},6000"
+        f"&bias=proximity:{lon},{lat}"
+        "&limit=12"
+        f"&apiKey={API_KEY}"
+    )
 
-    params = {
-        "query": "tourist attraction",
-        "near": city,
-        "limit": 10
-    }
-
-    data = requests.get(url, headers=headers, params=params).json()
+    response = requests.get(url).json()
 
     places = []
-    for item in data.get("results", []):
-        name = item.get("name")
-        if name:
-            places.append(name)
+    for item in response.get("features", []):
+        props = item.get("properties", {})
+        name = props.get("name", "Unknown Place")
 
-    if not places:
-        places = ["No tourist places found"]
+        # Geoapify does not provide images → always fallback to default in UI
+        places.append({
+            "name": name,
+            "image": None
+        })
 
-    return {"city": city, "places": places[:5]}
+    return {
+        "city": city,
+        "places": places
+    }
